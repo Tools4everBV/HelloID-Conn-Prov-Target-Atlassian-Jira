@@ -4,22 +4,6 @@ $m = $manager | ConvertFrom-Json;
 $success = $False;
 $auditLogs = New-Object Collections.Generic.List[PSCustomObject];
 
-$account_guid = New-Guid;
-
-# Change mapping here
-$account = [PSCustomObject]@{
-    displayName = $p.DisplayName;
-    firstName= $p.Name.NickName;
-    lastName= $p.Name.FamilyName;
-    userName = $p.UserName;
-    externalId = $account_guid;
-    title = $p.PrimaryContract.Title.Name;
-    department = $p.PrimaryContract.Department.DisplayName;
-    startDate = $p.PrimaryContract.StartDate;
-    endDate = $p.PrimaryContract.EndDate;
-    manager = $p.PrimaryManager.DisplayName;
-};
-
 function New-RandomPassword($PasswordLength) {
     if($PasswordLength -lt 8) { $PasswordLength = 8}
 
@@ -47,6 +31,65 @@ function New-RandomPassword($PasswordLength) {
     $password
 }
 
+
+function GenerateName {
+    [cmdletbinding()]
+    Param (
+        [object]$person
+    )
+    try {
+        $initials = $person.Name.Initials -replace "\W"
+        $initials = ([string]::Join('.', ([string[]]$initials.ToCharArray()))) + "."
+        $FamilyNamePrefix = $person.Name.FamilyNamePrefix
+        $FamilyName = $person.Name.FamilyName           
+        $PartnerNamePrefix = $person.Name.FamilyNamePartnerPrefix
+        $PartnerName = $person.Name.FamilyNamePartner 
+        $convention = $person.Name.Convention
+        $Name = $person.Name.NickName
+
+        switch ($convention) {
+            "B" {
+                $Name += if (-NOT([string]::IsNullOrEmpty($FamilyNamePrefix))) { " " + $FamilyNamePrefix }
+                $Name += " " + $FamilyName
+            }
+            "P" {
+                $Name += if (-NOT([string]::IsNullOrEmpty($PartnerNamePrefix))) { " " + $PartnerNamePrefix }
+                $Name += " " + $PartnerName
+            }
+            "BP" {
+                $Name += if (-NOT([string]::IsNullOrEmpty($FamilyNamePrefix))) { " " + $FamilyNamePrefix }
+                $Name += " " + $FamilyName + " - "
+                $Name += if (-NOT([string]::IsNullOrEmpty($PartnerNamePrefix))) { $PartnerNamePrefix + " " }
+                $Name += $PartnerName
+            }
+            "PB" {
+                $Name += if (-NOT([string]::IsNullOrEmpty($PartnerNamePrefix))) { " " + $PartnerNamePrefix }
+                $Name += " " + $PartnerName + " - "
+                $Name += if (-NOT([string]::IsNullOrEmpty($FamilyNamePrefix))) { $FamilyNamePrefix + " " }
+                $Name += $FamilyName
+            }
+            Default {
+               $Name += if (-NOT([string]::IsNullOrEmpty($FamilyNamePrefix))) { " " + $FamilyNamePrefix }
+                $Name += " " + $FamilyName
+            }
+        }      
+        return $Name
+            
+    }
+    catch {
+        throw("An error was found in the name convention algorithm: $($_.Exception.Message): $($_.ScriptStackTrace)")
+    } 
+}
+
+# Change mapping here
+$account = [PSCustomObject]@{
+    displayName = GenerateName -person $p
+    emailAddress = $p.Accounts.MicrosoftActiveDirectory.userprincipalname
+    password = New-RandomPassword(14)
+    name = $p.Accounts.MicrosoftActiveDirectory.userprincipalname
+    
+};
+
 if(-Not($dryRun -eq $True)) {
     # Write create logic here
     try
@@ -58,14 +101,14 @@ if(-Not($dryRun -eq $True)) {
         $headers = @{"authorization" = $Key }    
 
         $CreateParams = @{
-                name=$p.contact.business.email;
-                password=New-RandomPassword(14)
-                emailAddress=$p.contact.business.email;
-                displayName=$p.Name.GivenName + " " + $p.Name.FamilyName;
+                name=$account.name
+                password=$account.password
+                emailAddress=$account.emailAddress
+                displayName=$account.displayname;
         };
-        if ([string]::IsNullOrEmpty($p.contact.business.email) -eq $false)
+        if ([string]::IsNullOrEmpty($account.name) -eq $false)
         {
-            $url = $c.url + "/rest/api/3/user/search?query=" + $p.contact.business.email
+            $url = $c.url + "/rest/api/3/user/search?query=" + $account.name
             $response = Invoke-RestMethod -Method GET -Uri $url -Headers $headers
             if (($response | Measure-Object).Count -ge 1)
             {
@@ -89,7 +132,7 @@ if(-Not($dryRun -eq $True)) {
         $success = $False;
         $auditLogs.Add([PSCustomObject]@{
                     Action = "CreateAccount"
-                    Message = "Error creating account with PrimaryEmail $($p.contact.business.email) - Error: $($_)"
+                    Message = "Error creating account with email $($account.emailAddress) - Error: $($_)"
                     IsError = $true;
                 });
         Write-Error $_
@@ -98,8 +141,8 @@ if(-Not($dryRun -eq $True)) {
 }
 
 $auditLogs.Add([PSCustomObject]@{
-    # Action = "CreateAccount"; Optionally specify a different action for this audit log
-    Message = "Created account with PrimaryEmail $($p.contact.business.email)";
+    Action = "CreateAccount"; #Optionally specify a different action for this audit log
+    Message = "Created account with email $($account.emailAddress)";
     IsError = $False;
 });
 
@@ -113,8 +156,8 @@ $result = [PSCustomObject]@{
     # Optionally return data for use in other systems
     ExportData = [PSCustomObject]@{
         displayName = $account.DisplayName;
-        userName = $account.UserName;
-        externalId = $aRef;
+        userName = $account.Name;
+        accountId = $aRef;
     };
 };
 Write-Output $result | ConvertTo-Json -Depth 10;
