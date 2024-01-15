@@ -1,163 +1,190 @@
-$c = $configuration | ConvertFrom-Json;
-$p = $person | ConvertFrom-Json;
-$m = $manager | ConvertFrom-Json;
-$success = $False;
-$auditLogs = New-Object Collections.Generic.List[PSCustomObject];
+#####################################################
+# HelloID-Conn-Prov-Target-Atlassian-Jira-Create
+#
+# Version: 2.0.0 | new-powershell-connector
+#####################################################
 
-function New-RandomPassword($PasswordLength) {
-    if($PasswordLength -lt 8) { $PasswordLength = 8}
+# Set to true at start, because only when an error occurs it is set to false
+$outputContext.Success = $true
 
-    # Used to store an array of characters that can be used for the password
-    $CharPool = New-Object System.Collections.ArrayList
+# AccountReference must have a value for dryRun
+$outputContext.AccountReference = "Unknown"
 
-    # Add characters a-z to the arraylist
-    for ($index = 97; $index -le 122; $index++) { [Void]$CharPool.Add([char]$index) }
-
-    # Add characters A-Z to the arraylist
-    for ($index = 65; $index -le 90; $index++) { [Void]$CharPool.Add([Char]$index) }
-
-    # Add digits 0-9 to the arraylist
-    $CharPool.AddRange(@("0","1","2","3","4","5","6","7","8","9"))
-
-    # Add a range of special characters to the arraylist
-    $CharPool.AddRange(@("!","""","#","$","%","&","'","(",")","*","+","-",".","/",":",";","<","=",">","?","@","[","\","]","^","_","{","|","}","~","!"))
-
-    $password=""
-    $rand=New-Object System.Random
-
-    # Generate password by appending a random value from the array list until desired length of password is reached
-    1..$PasswordLength | ForEach-Object { $password = $password + $CharPool[$rand.Next(0,$CharPool.Count)] }
-
-    $password
+$action = ""
+# Set debug logging
+switch ($($actionContext.Configuration.isDebug)) {
+    $true { $VerbosePreference = 'Continue' }
+    $false { $VerbosePreference = 'SilentlyContinue' }
 }
 
+# Enable TLS1.2
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
-function GenerateName {
-    [cmdletbinding()]
-    Param (
-        [object]$person
+# done in field mapping
+$account = $actionContext.Data
+
+#region functions
+function New-AuthorizationHeaders {
+    [CmdletBinding()]
+    [OutputType([System.Collections.Generic.Dictionary[[String], [String]]])]
+    param(
+        [parameter(Mandatory)]
+        [string]
+        $username,
+
+        [parameter(Mandatory)]
+        [SecureString]
+        $password
     )
-    try {
-        $initials = $person.Name.Initials -replace "\W"
-        $initials = ([string]::Join('.', ([string[]]$initials.ToCharArray()))) + "."
-        $FamilyNamePrefix = $person.Name.FamilyNamePrefix
-        $FamilyName = $person.Name.FamilyName           
-        $PartnerNamePrefix = $person.Name.FamilyNamePartnerPrefix
-        $PartnerName = $person.Name.FamilyNamePartner 
-        $convention = $person.Name.Convention
-        $Name = $person.Name.NickName
+    try {    
+        #Add the authorization header to the request
+        Write-Verbose 'Adding Authorization headers'
 
-        switch ($convention) {
-            "B" {
-                $Name += if (-NOT([string]::IsNullOrEmpty($FamilyNamePrefix))) { " " + $FamilyNamePrefix }
-                $Name += " " + $FamilyName
-            }
-            "P" {
-                $Name += if (-NOT([string]::IsNullOrEmpty($PartnerNamePrefix))) { " " + $PartnerNamePrefix }
-                $Name += " " + $PartnerName
-            }
-            "BP" {
-                $Name += if (-NOT([string]::IsNullOrEmpty($FamilyNamePrefix))) { " " + $FamilyNamePrefix }
-                $Name += " " + $FamilyName + " - "
-                $Name += if (-NOT([string]::IsNullOrEmpty($PartnerNamePrefix))) { $PartnerNamePrefix + " " }
-                $Name += $PartnerName
-            }
-            "PB" {
-                $Name += if (-NOT([string]::IsNullOrEmpty($PartnerNamePrefix))) { " " + $PartnerNamePrefix }
-                $Name += " " + $PartnerName + " - "
-                $Name += if (-NOT([string]::IsNullOrEmpty($FamilyNamePrefix))) { $FamilyNamePrefix + " " }
-                $Name += $FamilyName
-            }
-            Default {
-               $Name += if (-NOT([string]::IsNullOrEmpty($FamilyNamePrefix))) { " " + $FamilyNamePrefix }
-                $Name += " " + $FamilyName
-            }
-        }      
-        return $Name
-            
-    }
-    catch {
-        throw("An error was found in the name convention algorithm: $($_.Exception.Message): $($_.ScriptStackTrace)")
-    } 
-}
+        $passwordToUse = $password | ConvertFrom-SecureString -AsPlainText -Force
 
-# Change mapping here
-$account = [PSCustomObject]@{
-    displayName = GenerateName -person $p
-    emailAddress = $p.Accounts.MicrosoftActiveDirectory.userprincipalname
-    password = New-RandomPassword(14)
-    name = $p.Accounts.MicrosoftActiveDirectory.userprincipalname
-    
-};
-
-if(-Not($dryRun -eq $True)) {
-    # Write create logic here
-    try
-    {
-        $pair = $c.username + ":" + $c.password
+        $headers = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
+        $pair = $username + ":" + $passwordToUse
         $bytes = [System.Text.Encoding]::ASCII.GetBytes($pair)
         $base64 = [System.Convert]::ToBase64String($bytes)
         $key = "Basic $base64"
-        $headers = @{"authorization" = $Key }    
+        $headers = @{
+            "authorization" = $Key
+            "Accept" = "application/json"
+            "Content-Type" = "application/json"
+        } 
 
-        $CreateParams = @{
-                name=$account.name
-                password=$account.password
-                emailAddress=$account.emailAddress
-                displayName=$account.displayname;
-        };
-        if ([string]::IsNullOrEmpty($account.name) -eq $false)
+        Write-Output $headers  
+    }
+    catch {
+        $PSCmdlet.ThrowTerminatingError($_)
+    }
+}
+#endregion functions
+
+try {
+    [Security.SecureString]$securePassword = ConvertTo-SecureString $actionContext.Configuration.password -AsPlainText -Force
+    $headers = New-AuthorizationHeaders -username $actionContext.Configuration.username -password $securePassword
+
+    # Check if we should try to correlate the account
+    if ($actionContext.CorrelationConfiguration.Enabled) {
+        $action = "correlate"
+        $correlationField = $actionContext.CorrelationConfiguration.accountField
+        $correlationValue = $actionContext.CorrelationConfiguration.accountFieldValue
+
+        if ([string]::IsNullOrEmpty($correlationField)) {
+            Write-Warning "Correlation is enabled but not configured correctly."
+            Throw "Correlation is enabled but not configured correctly."
+        }
+
+        if ([string]::IsNullOrEmpty($correlationValue)) {
+            Write-Warning "The correlation value for [$correlationField] is empty. This is likely a scripting issue."
+            Throw "The correlation value for [$correlationField] is empty. This is likely a scripting issue."
+        }
+
+        # get object
+        if ([string]::IsNullOrEmpty($($account.$correlationValue)) -eq $false)
         {
-            $url = $c.url + "/rest/api/3/user/search?query=" + $account.name
+            $url = $actionContext.Configuration.url + "/rest/api/3/user/search?query=" + $($account.$correlationValue)
             $response = Invoke-RestMethod -Method GET -Uri $url -Headers $headers
+
             if (($response | Measure-Object).Count -ge 1)
             {
-                $aRef = $response.accountId
+                if (-Not($actionContext.DryRun -eq $true)) {
+                    $outputContext.AuditLogs.Add([PSCustomObject]@{
+                        Action  = "CorrelateAccount"
+                        Message = "Correlated account with id [$($response.accountId)] on field $($correlationField) with value $($correlationValue)"
+                        IsError = $false
+                    })
+                } else {
+                    Write-Warning "DryRun: Would correlate account [$($personContext.Person.DisplayName)] on field [$($correlationField)] with value [$($correlationValue)]"
+                    $outputContext.AuditLogs.Add([PSCustomObject]@{
+                        Action  = "CorrelateAccount"
+                        Message = "DryRun: Would correlate account [$($personContext.Person.DisplayName)] on field [$($correlationField)] with value [$($correlationValue)]"
+                        IsError = $false
+                    })
+                }
+                $outputContext.AccountReference = $response.accountId
+                $outputContext.AccountCorrelated = $true
             }
-            else
-            { 
-                $CreateParamsJson = $CreateParams | ConvertTo-Json
-                $url = $c.url + "/rest/api/3/user"
+        }
+    } else {
+        $outputContext.AuditLogs.Add([PSCustomObject]@{
+            Action  = "CorrelateAccount"
+            Message = "Configuration of correlation is madatory."
+            IsError = $true
+        })
+        Throw "Configuration of correlation is madatory."
+    }
+
+    # create the account object if not present
+    if (!$outputContext.AccountCorrelated) {    
+        $action = "create" 
+        $account = $actionContext.Data
+
+        Write-Verbose "Creating account for: [$($personContext.Person.DisplayName)]"
+        $CreateParams = @{
+            name=$account.name
+            password=$account.password
+            emailAddress=$account.emailAddress
+            displayName=$account.displayname
+        }
+
+        $CreateParamsJson = $CreateParams | ConvertTo-Json
+        $url = $actionContext.Configuration.url + "/rest/api/3/user"
+        try {
+            if (-Not($actionContext.DryRun -eq $true)) {
                 $response = Invoke-RestMethod -Method Post -Uri $url -Body $CreateParamsJson -ContentType "application/json" -Headers $headers
-                $aRef = $response.accountId
+            
+                $outputContext.AccountReference = $response.accountId
+                $outputContext.Data = $response
+
+                $outputContext.AuditLogs.Add([PSCustomObject]@{
+                    Action  = "CreateAccount"
+                    Message = "Created account with email $($account.emailAddress)"
+                    IsError = $false
+                })
+            } else {
+                Write-Warning "DryRun: Would create account [$($account | ConvertTo-Json)]"
+                $outputContext.AuditLogs.Add([PSCustomObject]@{
+                    Action  = "CreateAccount"
+                    Message = "DryRun: Would create account [$($account | ConvertTo-Json)]"
+                    IsError = $false
+                })
             }
-            $success = $True;
         }
-        else
-        {
-            $success = $False;
+        catch {
+            $outputContext.AuditLogs.Add([PSCustomObject]@{
+                Action  = "CreateAccount"
+                Message = "Error creating account with email $($account.emailAddress) - Error: $($_)"
+                IsError = $true
+            })
         }
     }
-    catch { 
-        $success = $False;
-        $auditLogs.Add([PSCustomObject]@{
-                    Action = "CreateAccount"
-                    Message = "Error creating account with email $($account.emailAddress) - Error: $($_)"
-                    IsError = $true;
-                });
-        Write-Error $_
+} 
+catch {
+    $ex = $PSItem
+    if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
+        $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
+
+        if (-Not [string]::IsNullOrEmpty($ex.ErrorDetails.Message)) {
+            $errorMessage = "Could not $action account. Error: $($ex.ErrorDetails.Message)"
+        }
+        else {
+            $errorMessage = "Could not $action account. Error: $($ex.Exception.Message)"
+        }
     }
-    
+    else {
+        $errorMessage = "Could not $action account. Error: $($ex.Exception.Message) $($ex.ScriptStackTrace)"
+    }
+    $outputContext.AuditLogs.Add([PSCustomObject]@{
+        Action  = "CreateAccount"
+        Message = "Error occurred when $action account. Error Message: $($errorMessage.AuditErrorMessage)"
+        IsError = $true
+    })
 }
-
-$auditLogs.Add([PSCustomObject]@{
-    Action = "CreateAccount"; #Optionally specify a different action for this audit log
-    Message = "Created account with email $($account.emailAddress)";
-    IsError = $False;
-});
-
-# Send results
-$result = [PSCustomObject]@{
-	Success= $success;
-	AccountReference= $aRef;
-	AuditLogs = $auditLogs;
-    Account = $account;
-
-    # Optionally return data for use in other systems
-    ExportData = [PSCustomObject]@{
-        displayName = $account.DisplayName;
-        userName = $account.Name;
-        accountId = $aRef;
-    };
-};
-Write-Output $result | ConvertTo-Json -Depth 10;
+finally {
+    # Check if auditLogs contains errors, if errors are found, set success to false
+    if ($outputContext.AuditLogs.IsError -contains $true) {
+        $outputContext.Success = $false
+    }
+}
