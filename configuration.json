@@ -31,5 +31,14 @@
         "placeholder": "Please enter a password",
         "required": true
       }
+    },
+    {
+      "key": "isDebug",
+      "type": "checkbox",
+      "defaultValue": false,
+      "templateOptions": {
+        "label": "Toggle debug logging",
+        "required": false
+      }
     }
   ]
