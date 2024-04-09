@@ -26,20 +26,34 @@
 - [HelloID Docs](#helloid-docs)
 
 ## Introduction
-The interface to communicate with Jira is via the API. Please see https://developer.atlassian.com/cloud/jira/platform/rest/v3/ for more information about the API.
 
-With this connector you can create and delete accounts. Furthermore you can assign/unassign group memberships to Jira groups.
+_HelloID-Conn-Prov-Target-Atlassian-Jira_ is a _target_ connector. _HelloID-Conn-Prov-Target-Atlassian-Jira_ provides a set of REST API's that allow you to programmatically interact with its data. The HelloID connector uses the API endpoints listed in the table below.
+
+| Endpoint | Description |
+| -------- | ----------- |
+| /user    |             |
+| /groups  |             |
+| /group   |             |
+
+Use the documentation of Atlassian to know more about the endpoints: 
+- https://developer.atlassian.com/cloud/jira/platform/rest/v3/ 
+- https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-users/#api-rest-api-3-user-post
+
+
+The following lifecycle actions are available:
+| Action                 | Description                                      |
+| ---------------------- | ------------------------------------------------ |
+| create.ps1             | PowerShell _create_ lifecycle action             |
+| delete.ps1             | PowerShell _delete_ lifecycle action             |            |
+| grantPermission.ps1    | PowerShell _grant_ lifecycle action              |
+| revokePermission.ps1   | PowerShell _revoke_ lifecycle action             |
+| permissions.ps1        | PowerShell _permissions_ lifecycle action        |
+| configuration.json     | Default _[configuration.json](https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Atlassian-Jira/blob/main/target/configuration.json)_ |
+| fieldMapping.json      | Default _[fieldMapping.json](https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Atlassian-Jira/blob/main/target/fieldMapping.json)_   |
+
+
 
 ## Provisioning PowerShell V2 connector
-
-### Connection settings
-The following settings are required to connect to the API.
-
-| Setting     | Description |
-| ------------ | ----------- |
-| Jira Url | Example: https://customer.atlassian.net |
-| Username | User with permissions to create account |
-| Password | Password of the user |
 
 ### Correlation configuration
 
@@ -57,15 +71,29 @@ To properly set up the correlation:
     | Person correlation field  | Not set                                                |
     | Account correlation field | `Name`                                    |
 
+> [!TIP]
+> _For more information on correlation, please refer to our correlation [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems/correlation.html) pages_.
+
 ### Field mapping
-Please use the provided 'fieldMapping.json' to make sure the field mapping is correct. For more information about importing target mappings click [here](https://docs.helloid.com/en/provisioning/target-systems/active-directory-target-systems/target-mappings/import-target-mappings.html). 
+The field mapping can be imported by using the _fieldMapping.json_ file. 
+For more information about importing target mappings click [here](https://docs.helloid.com/en/provisioning/target-systems/active-directory-target-systems/target-mappings/import-target-mappings.html). 
+
+### Connection settings
+The following settings are required to connect to the API.
+
+| Setting     | Description |
+| ------------ | ----------- |
+| Jira Url | Example: https://customer.atlassian.net |
+| Username | User with the correct permissions |
+| Password | Password of the user |
+
 
 ## Getting help
-> _For more information on how to configure a HelloID PowerShell connector, please refer to our [documentation](https://docs.helloid.com/hc/en-us/articles/360012518799-How-to-add-a-target-system) pages_
+> [!TIP]
+> _For more information on how to configure a HelloID PowerShell connector, please refer to our [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems.html) pages_
 
+> [!TIP]
 > _If you need help, feel free to ask questions on our [forum](https://forum.helloid.com)_
-
-https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-users/#api-rest-api-3-user-post
 
 # HelloID Docs
 The official HelloID documentation can be found at: https://docs.helloid.com/
