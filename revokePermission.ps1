@@ -4,8 +4,8 @@
 # Version: 2.0.0 | new-powershell-connector
 #####################################################
 
-# Set to true at start, because only when an error occurs it is set to false
-$outputContext.Success = $true
+# Set to false at start, because only when no error occurs it is set to true
+$outputContext.Success = $false
 
 # AccountReference must have a value for dryRun
 $aRef = $actionContext.References.Account
@@ -24,15 +24,50 @@ switch ($($actionContext.Configuration.isDebug)) {
 $InformationPreference = "Continue"
 $WarningPreference = "Continue"
 
-try {    
-    if (-Not($actionContext.DryRun -eq $true)) {
-        Write-Verbose "Revoking Jira entitlement: [$($pRef.Reference)] from: [$($personContext.Person.DisplayName)]"
+#region functions
+function New-AuthorizationHeaders {
+    [CmdletBinding()]
+    [OutputType([System.Collections.Generic.Dictionary[[String], [String]]])]
+    param(
+        [parameter(Mandatory)]
+        [string]
+        $username,
 
-        $pair = $actionContext.Configuration.username + ":" + $actionContext.Configuration.password
-        $bytes = [System.Text.Encoding]::ASCII.GetBytes($pair)
+        [parameter(Mandatory)]
+        [SecureString]
+        $password
+    )
+    try {    
+        #Add the authorization header to the request
+        Write-Verbose 'Adding Authorization headers'
+
+        $passwordToUse = $password | ConvertFrom-SecureString -AsPlainText
+
+        $headers = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
+        $pair = $username + ":" + $passwordToUse
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes($pair)
         $base64 = [System.Convert]::ToBase64String($bytes)
         $key = "Basic $base64"
-        $headers = @{"authorization" = $Key }    
+        $headers = @{
+            "authorization" = $Key
+            "Accept" = "application/json"
+            "Content-Type" = "application/json"
+        } 
+
+        Write-Output $headers  
+    }
+    catch {
+        $PSCmdlet.ThrowTerminatingError($_)
+    }
+}
+#endregion functions
+
+try {    
+    [SecureString]$securePassword = ConvertTo-SecureString $actionContext.Configuration.password -AsPlainText -Force
+    $headers = New-AuthorizationHeaders -username $actionContext.Configuration.username -password $securePassword 
+
+    if (-Not($actionContext.DryRun -eq $true)) {
+        Write-Verbose "Revoking Jira entitlement: [$($pRef.Reference)] from: [$($personContext.Person.DisplayName)]"
 
         $url = $actionContext.Configuration.url + "/rest/api/3/group/user?groupId=$($pRef.Reference)&accountId=$aRef"
         $response = Invoke-RestMethod -Method DELETE -Uri $url -Headers $headers
@@ -63,8 +98,8 @@ catch {
     })
 }
 finally {
-    # Check if auditLogs contains errors, if errors are found, set success to false
-    if ($outputContext.AuditLogs.IsError -contains $true) {
-        $outputContext.Success = $false
+    # Check if auditLogs contains errors, if no errors are found, set success to true
+    if (-not($outputContext.AuditLogs.IsError -contains $true)) {
+        $outputContext.Success = $true
     }
 }

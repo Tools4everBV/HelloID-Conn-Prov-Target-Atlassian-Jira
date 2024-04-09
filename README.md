@@ -58,15 +58,7 @@ To properly set up the correlation:
     | Account correlation field | `Name`                                    |
 
 ### Field mapping
-The mandatory field mapping is listed below.
-
-| Name           | Create | Enable | Update | Disable | Delete | Store in account data | Default mapping                            | Mandatory | Comment                                        |
-| -------------- | ------ | ------ | ------ | ------- | ------ | --------------------- | ------------------------------------------ | --------- | ---------------------------------------------- |
-| displayName     | X      |        |       |         |  X      | Yes                   | Complex: [displayName.js](./Mapping/displayName.js)| Yes       |  |
-| emailAddress     | X      |        |       |         | X       | Yes                   | Complex: [emailAddress.js](./Mapping/emailAddress.js)| Yes       |  |
-| name     | X      |        |       |         | X       | Yes                   | Complex: [name.js](./Mapping/name.js)| Yes       | Used for Correlation and to store account data |
-| password     | X      |        |       |         |        | Yes                   | Complex: [password.js](./Mapping/password.js)| Yes       |  |
-
+Please use the provided 'fieldMapping.json' to make sure the field mapping is correct. For more information about importing target mappings click [here](https://docs.helloid.com/en/provisioning/target-systems/active-directory-target-systems/target-mappings/import-target-mappings.html). 
 
 ## Getting help
 > _For more information on how to configure a HelloID PowerShell connector, please refer to our [documentation](https://docs.helloid.com/hc/en-us/articles/360012518799-How-to-add-a-target-system) pages_

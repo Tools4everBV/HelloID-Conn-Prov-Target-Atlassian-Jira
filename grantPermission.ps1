@@ -4,8 +4,8 @@
 # Version: 2.0.0 | new-powershell-connector
 #####################################################
 
-# Set to true at start, because only when an error occurs it is set to false
-$outputContext.Success = $true
+# Set to false at start, because only when no error occurs it is set to true
+$outputContext.Success = $false
 
 # AccountReference must have a value for dryRun
 $aRef = $actionContext.References.Account
@@ -41,7 +41,7 @@ function New-AuthorizationHeaders {
         #Add the authorization header to the request
         Write-Verbose 'Adding Authorization headers'
 
-        $passwordToUse = $password | ConvertFrom-SecureString -AsPlainText -Force
+        $passwordToUse = $password | ConvertFrom-SecureString -AsPlainText
 
         $headers = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
         $pair = $username + ":" + $passwordToUse
@@ -63,7 +63,7 @@ function New-AuthorizationHeaders {
 #endregion functions
 
 try {    
-    [Security.SecureString]$securePassword = ConvertTo-SecureString $actionContext.Configuration.password -AsPlainText -Force
+    [SecureString]$securePassword = ConvertTo-SecureString $actionContext.Configuration.password -AsPlainText -Force
     $headers = New-AuthorizationHeaders -username $actionContext.Configuration.username -password $securePassword 
 
     if (-Not($actionContext.DryRun -eq $true)) {
@@ -107,8 +107,8 @@ catch {
     })
 }
 finally {
-    # Check if auditLogs contains errors, if errors are found, set success to false
-    if ($outputContext.AuditLogs.IsError -contains $true) {
-        $outputContext.Success = $false
+    # Check if auditLogs contains errors, if no errors are found, set success to true
+    if (-not($outputContext.AuditLogs.IsError -contains $true)) {
+        $outputContext.Success = $true
     }
 }

@@ -26,9 +26,9 @@
       "type": "input",
       "defaultValue": "",
       "templateOptions": {
-        "label": "Jira API Password",
+        "label": "Jira API",
         "type": "password",
-        "placeholder": "Please enter a password",
+        "placeholder": "Please enter an API key",
         "required": true
       }
     },
