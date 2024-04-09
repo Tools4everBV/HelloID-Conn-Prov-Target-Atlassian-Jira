@@ -76,7 +76,7 @@ To properly set up the correlation:
 
 ### Field mapping
 The field mapping can be imported by using the _fieldMapping.json_ file. 
-For more information about importing target mappings click [here](https://docs.helloid.com/en/provisioning/target-systems/active-directory-target-systems/target-mappings/import-target-mappings.html). 
+For more information about importing target mappings click [here](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems/target-mappings/import-target-mappings.html). 
 
 ### Connection settings
 The following settings are required to connect to the API.
