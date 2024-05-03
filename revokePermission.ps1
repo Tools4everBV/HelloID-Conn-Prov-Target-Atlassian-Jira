@@ -1,5 +1,5 @@
 #####################################################
-# HelloID-Conn-Prov-Target-Atlassian-Jira-Delete
+# HelloID-Conn-Prov-Target-Atlassian-Jira-Permission-Revoke
 #
 # Version: 2.0.0 | new-powershell-connector
 #####################################################
@@ -7,19 +7,22 @@
 # Set to false at start, because only when no error occurs it is set to true
 $outputContext.Success = $false
 
+# AccountReference must have a value for dryRun
 $aRef = $actionContext.References.Account
+
+# The permissionReference object contains the Identification object provided in the retrieve permissions call
+$pRef = $actionContext.References.Permission
+
+# Set TLS to accept TLS, TLS 1.1 and TLS 1.2
+[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::Tls12
 
 # Set debug logging
 switch ($($actionContext.Configuration.isDebug)) {
     $true { $VerbosePreference = 'Continue' }
     $false { $VerbosePreference = 'SilentlyContinue' }
 }
-
-# Enable TLS1.2
-[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
-
-# done in field mapping
-$account = $actionContext.Data
+$InformationPreference = "Continue"
+$WarningPreference = "Continue"
 
 #region functions
 function New-AuthorizationHeaders {
@@ -59,49 +62,39 @@ function New-AuthorizationHeaders {
 }
 #endregion functions
 
-try {
+try {    
     [SecureString]$securePassword = ConvertTo-SecureString $actionContext.Configuration.token -AsPlainText -Force
-    $headers = New-AuthorizationHeaders -username $actionContext.Configuration.username -password $securePassword
+    $headers = New-AuthorizationHeaders -username $actionContext.Configuration.username -password $securePassword 
 
     if (-Not($actionContext.DryRun -eq $true)) {
-        if ([string]::IsNullOrEmpty($aRef) -eq $false) {
-            $url = $actionContext.Configuration.url + "/rest/api/3/user?accountId=" + $aRef
-            $response = Invoke-RestMethod -Method DELETE -Uri $url -Headers $headers
+        Write-Verbose "Revoking Jira entitlement: [$($pRef.Reference)] from: [$($personContext.Person.DisplayName)]"
 
-            $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Action  = "DeleteAccount"
-                    Message = "Successfully deleted account with id [$aRef]"
-                    IsError = $false
-                })
-        }
+        $url = $actionContext.Configuration.url + "/rest/api/3/group/user?groupId=$($pRef.Reference)&accountId=$aRef"
+        $response = Invoke-RestMethod -Method DELETE -Uri $url -Headers $headers
+    
+        $outputContext.AuditLogs.Add([PSCustomObject]@{
+                Action  = "RevokePermission"
+                Message = "Revoked Jira entitlement: [$($pRef.Reference)] from: [$($personContext.Person.DisplayName)]"
+                IsError = $false
+            })
     }
     else {
-        Write-Verbose "DryRun: Would delete account [$($account | ConvertTo-Json)]"
+        Write-Verbose "DryRun: Would revoke Jira entitlement: [$($pRef.Reference)] from: [$($personContext.Person.DisplayName)], will be executed during enforcement"
         $outputContext.AuditLogs.Add([PSCustomObject]@{
-                Action  = "DeleteAccount"
-                Message = "DryRun: Would delete account with id [$aRef]"
+                Action  = "RevokePermission"
+                Message = "DryRun: Would revoke Jira entitlement: [$($pRef.Reference)] from: [$($personContext.Person.DisplayName)]"
                 IsError = $false
             })
     }
 }
 catch {
     $ex = $PSItem
-    if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
-        $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
+    $errorMessage = "Could not revoke Jira entitlement: [$($pRef.Reference)] from: [$($personContext.Person.DisplayName)]. Error: $($ex.Exception.Message)"
 
-        if (-Not [string]::IsNullOrEmpty($ex.ErrorDetails.Message)) {
-            $errorMessage = "Could not delete account. Error: $($ex.ErrorDetails.Message)"
-        }
-        else {
-            $errorMessage = "Could not delete account. Error: $($ex.Exception.Message)"
-        }
-    }
-    else {
-        $errorMessage = "Could not delete account. Error: $($ex.Exception.Message) $($ex.ScriptStackTrace)"
-    }
+    Write-Verbose $errorMessage -Verbose
     $outputContext.AuditLogs.Add([PSCustomObject]@{
-            Action  = "Delete Account"
-            Message = "Error occurred when deleting account. Error Message: $($errorMessage.AuditErrorMessage)"
+            Action  = "RevokePermission"
+            Message = "Error occurred revoking Jira entitlement: [$($pRef.Reference)] from: [$($personContext.Person.DisplayName)]. Error: $($ex.Exception.Message)"
             IsError = $true
         })
 }
