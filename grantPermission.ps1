@@ -50,8 +50,8 @@ function New-AuthorizationHeaders {
         $key = "Basic $base64"
         $headers = @{
             "authorization" = $Key
-            "Accept" = "application/json"
-            "Content-Type" = "application/json"
+            "Accept"        = "application/json"
+            "Content-Type"  = "application/json"
         } 
 
         Write-Output $headers  
@@ -63,7 +63,7 @@ function New-AuthorizationHeaders {
 #endregion functions
 
 try {    
-    [SecureString]$securePassword = ConvertTo-SecureString $actionContext.Configuration.password -AsPlainText -Force
+    [SecureString]$securePassword = ConvertTo-SecureString $actionContext.Configuration.token -AsPlainText -Force
     $headers = New-AuthorizationHeaders -username $actionContext.Configuration.username -password $securePassword 
 
     if (-Not($actionContext.DryRun -eq $true)) {
@@ -82,17 +82,18 @@ try {
         $response = Invoke-RestMethod -Method POST -Uri $url -Headers $headers -Body $bodyJson
     
         $outputContext.AuditLogs.Add([PSCustomObject]@{
-            Action = "GrantPermission"
-            Message = "Grant Jira entitlement: [$($pRef.Reference)] to: [$($personContext.Person.DisplayName)]"
-            IsError = $false
-        })
-    } else {
+                Action  = "GrantPermission"
+                Message = "Grant Jira entitlement: [$($pRef.Reference)] to: [$($personContext.Person.DisplayName)]"
+                IsError = $false
+            })
+    }
+    else {
         Write-Verbose "DryRun: Would grant Jira entitlement: [$($pRef.Reference)] to: [$($personContext.Person.DisplayName)], will be executed during enforcement"
         $outputContext.AuditLogs.Add([PSCustomObject]@{
-            Action = "GrantPermission"
-            Message = "DryRun: Would grant Jira entitlement: [$($pRef.Reference)] to: [$($personContext.Person.DisplayName)]"
-            IsError = $false
-        })
+                Action  = "GrantPermission"
+                Message = "DryRun: Would grant Jira entitlement: [$($pRef.Reference)] to: [$($personContext.Person.DisplayName)]"
+                IsError = $false
+            })
     }
 }
 catch {
@@ -101,10 +102,10 @@ catch {
 
     Write-Verbose $errorMessage -Verbose
     $outputContext.AuditLogs.Add([PSCustomObject]@{
-        Action = "GrantPermission"
-        Message = "Error occurred granting Jira entitlement: [$($pRef.Reference)] to: [$($personContext.Person.DisplayName)]. Error: $($ex.Exception.Message)"
-        IsError = $true
-    })
+            Action  = "GrantPermission"
+            Message = "Error occurred granting Jira entitlement: [$($pRef.Reference)] to: [$($personContext.Person.DisplayName)]. Error: $($ex.Exception.Message)"
+            IsError = $true
+        })
 }
 finally {
     # Check if auditLogs contains errors, if no errors are found, set success to true

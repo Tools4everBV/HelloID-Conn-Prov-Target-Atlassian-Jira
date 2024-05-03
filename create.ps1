@@ -49,8 +49,8 @@ function New-AuthorizationHeaders {
         $key = "Basic $base64"
         $headers = @{
             "authorization" = $Key
-            "Accept" = "application/json"
-            "Content-Type" = "application/json"
+            "Accept"        = "application/json"
+            "Content-Type"  = "application/json"
         } 
 
         Write-Output $headers  
@@ -62,7 +62,7 @@ function New-AuthorizationHeaders {
 #endregion functions
 
 try {
-    [SecureString]$securePassword = ConvertTo-SecureString $actionContext.Configuration.password -AsPlainText -Force
+    [SecureString]$securePassword = ConvertTo-SecureString $actionContext.Configuration.token -AsPlainText -Force
     $headers = New-AuthorizationHeaders -username $actionContext.Configuration.username -password $securePassword
 
     # Check if we should try to correlate the account
@@ -89,17 +89,18 @@ try {
             if (($response | Measure-Object).Count -eq 1) {
                 if (-Not($actionContext.DryRun -eq $true)) {
                     $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Action  = "CorrelateAccount"
-                        Message = "Correlated account with id [$($response.accountId)] on field $($correlationField) with value $($correlationValue)"
-                        IsError = $false
-                    })
-                } else {
+                            Action  = "CorrelateAccount"
+                            Message = "Correlated account with id [$($response.accountId)] on field $($correlationField) with value $($correlationValue)"
+                            IsError = $false
+                        })
+                }
+                else {
                     Write-Warning "DryRun: Would correlate account [$($personContext.Person.DisplayName)] on field [$($correlationField)] with value [$($correlationValue)]"
                     $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Action  = "CorrelateAccount"
-                        Message = "DryRun: Would correlate account [$($personContext.Person.DisplayName)] on field [$($correlationField)] with value [$($correlationValue)]"
-                        IsError = $false
-                    })
+                            Action  = "CorrelateAccount"
+                            Message = "DryRun: Would correlate account [$($personContext.Person.DisplayName)] on field [$($correlationField)] with value [$($correlationValue)]"
+                            IsError = $false
+                        })
                 }
                 $outputContext.AccountReference = $response.accountId
                 $outputContext.AccountCorrelated = $true
@@ -108,10 +109,10 @@ try {
     } 
     else {
         $outputContext.AuditLogs.Add([PSCustomObject]@{
-            Action  = "CorrelateAccount"
-            Message = "Configuration of correlation is madatory."
-            IsError = $true
-        })
+                Action  = "CorrelateAccount"
+                Message = "Configuration of correlation is madatory."
+                IsError = $true
+            })
         Throw "Configuration of correlation is madatory."
     }
 
@@ -122,10 +123,10 @@ try {
 
         Write-Verbose "Creating account for: [$($personContext.Person.DisplayName)]"
         $CreateParams = @{
-            name=$account.name
-            password=$account.password
-            emailAddress=$account.emailAddress
-            displayName=$account.displayname
+            name         = $account.name
+            password     = $account.password
+            emailAddress = $account.emailAddress
+            displayName  = $account.displayname
         }
 
         $CreateParamsJson = $CreateParams | ConvertTo-Json
@@ -136,33 +137,33 @@ try {
             
                 $outputContext.AccountReference = $response.accountId
                 $createdAccount = [PSCustomObject]@{
-                    displayName = $response.displayName
+                    displayName  = $response.displayName
                     emailAddress = $response.emailAddress
-                    name = $response.name
+                    name         = $response.name
                 }
                 $outputContext.Data = $createdAccount
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Action  = "CreateAccount"
-                    Message = "Created account with email $($account.emailAddress)"
-                    IsError = $false
-                })
+                        Action  = "CreateAccount"
+                        Message = "Created account with email $($account.emailAddress)"
+                        IsError = $false
+                    })
             } 
             else {
                 Write-Warning "DryRun: Would create account [$($account | ConvertTo-Json)]"
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Action  = "CreateAccount"
-                    Message = "DryRun: Would create account [$($account | ConvertTo-Json)]"
-                    IsError = $false
-                })
+                        Action  = "CreateAccount"
+                        Message = "DryRun: Would create account [$($account | ConvertTo-Json)]"
+                        IsError = $false
+                    })
             }
         }
         catch {
             $outputContext.AuditLogs.Add([PSCustomObject]@{
-                Action  = "CreateAccount"
-                Message = "Error creating account with email $($account.emailAddress) - Error: $($_)"
-                IsError = $true
-            })
+                    Action  = "CreateAccount"
+                    Message = "Error creating account with email $($account.emailAddress) - Error: $($_)"
+                    IsError = $true
+                })
         }
     }
 } 
@@ -182,10 +183,10 @@ catch {
         $errorMessage = "Could not $action account. Error: $($ex.Exception.Message) $($ex.ScriptStackTrace)"
     }
     $outputContext.AuditLogs.Add([PSCustomObject]@{
-        Action  = "CreateAccount"
-        Message = "Error occurred when $action account. Error Message: $($errorMessage)"
-        IsError = $true
-    })
+            Action  = "CreateAccount"
+            Message = "Error occurred when $action account. Error Message: $($errorMessage)"
+            IsError = $true
+        })
 }
 finally {
     # Check if auditLogs contains errors, if no errors are found, set success to true

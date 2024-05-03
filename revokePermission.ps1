@@ -50,8 +50,8 @@ function New-AuthorizationHeaders {
         $key = "Basic $base64"
         $headers = @{
             "authorization" = $Key
-            "Accept" = "application/json"
-            "Content-Type" = "application/json"
+            "Accept"        = "application/json"
+            "Content-Type"  = "application/json"
         } 
 
         Write-Output $headers  
@@ -63,7 +63,7 @@ function New-AuthorizationHeaders {
 #endregion functions
 
 try {    
-    [SecureString]$securePassword = ConvertTo-SecureString $actionContext.Configuration.password -AsPlainText -Force
+    [SecureString]$securePassword = ConvertTo-SecureString $actionContext.Configuration.token -AsPlainText -Force
     $headers = New-AuthorizationHeaders -username $actionContext.Configuration.username -password $securePassword 
 
     if (-Not($actionContext.DryRun -eq $true)) {
@@ -73,17 +73,18 @@ try {
         $response = Invoke-RestMethod -Method DELETE -Uri $url -Headers $headers
     
         $outputContext.AuditLogs.Add([PSCustomObject]@{
-            Action = "RevokePermission"
-            Message = "Revoked Jira entitlement: [$($pRef.Reference)] from: [$($personContext.Person.DisplayName)]"
-            IsError = $false
-        })
-    } else {
+                Action  = "RevokePermission"
+                Message = "Revoked Jira entitlement: [$($pRef.Reference)] from: [$($personContext.Person.DisplayName)]"
+                IsError = $false
+            })
+    }
+    else {
         Write-Verbose "DryRun: Would revoke Jira entitlement: [$($pRef.Reference)] from: [$($personContext.Person.DisplayName)], will be executed during enforcement"
         $outputContext.AuditLogs.Add([PSCustomObject]@{
-            Action = "RevokePermission"
-            Message = "DryRun: Would revoke Jira entitlement: [$($pRef.Reference)] from: [$($personContext.Person.DisplayName)]"
-            IsError = $false
-        })
+                Action  = "RevokePermission"
+                Message = "DryRun: Would revoke Jira entitlement: [$($pRef.Reference)] from: [$($personContext.Person.DisplayName)]"
+                IsError = $false
+            })
     }
 }
 catch {
@@ -92,10 +93,10 @@ catch {
 
     Write-Verbose $errorMessage -Verbose
     $outputContext.AuditLogs.Add([PSCustomObject]@{
-        Action = "RevokePermission"
-        Message = "Error occurred revoking Jira entitlement: [$($pRef.Reference)] from: [$($personContext.Person.DisplayName)]. Error: $($ex.Exception.Message)"
-        IsError = $true
-    })
+            Action  = "RevokePermission"
+            Message = "Error occurred revoking Jira entitlement: [$($pRef.Reference)] from: [$($personContext.Person.DisplayName)]. Error: $($ex.Exception.Message)"
+            IsError = $true
+        })
 }
 finally {
     # Check if auditLogs contains errors, if no errors are found, set success to true

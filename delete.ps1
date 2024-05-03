@@ -47,8 +47,8 @@ function New-AuthorizationHeaders {
         $key = "Basic $base64"
         $headers = @{
             "authorization" = $Key
-            "Accept" = "application/json"
-            "Content-Type" = "application/json"
+            "Accept"        = "application/json"
+            "Content-Type"  = "application/json"
         } 
 
         Write-Output $headers  
@@ -60,7 +60,7 @@ function New-AuthorizationHeaders {
 #endregion functions
 
 try {
-    [SecureString]$securePassword = ConvertTo-SecureString $actionContext.Configuration.password -AsPlainText -Force
+    [SecureString]$securePassword = ConvertTo-SecureString $actionContext.Configuration.token -AsPlainText -Force
     $headers = New-AuthorizationHeaders -username $actionContext.Configuration.username -password $securePassword
 
     if (-Not($actionContext.DryRun -eq $true)) {
@@ -69,18 +69,19 @@ try {
             $response = Invoke-RestMethod -Method DELETE -Uri $url -Headers $headers
 
             $outputContext.AuditLogs.Add([PSCustomObject]@{
-                Action = "DeleteAccount"
-                Message = "Successfully deleted account with id [$aRef]"
-                IsError = $false
-            })
+                    Action  = "DeleteAccount"
+                    Message = "Successfully deleted account with id [$aRef]"
+                    IsError = $false
+                })
         }
-    } else {
+    }
+    else {
         Write-Verbose "DryRun: Would delete account [$($account | ConvertTo-Json)]"
         $outputContext.AuditLogs.Add([PSCustomObject]@{
-            Action = "DeleteAccount"
-            Message = "DryRun: Would delete account with id [$aRef]"
-            IsError = $false
-        })
+                Action  = "DeleteAccount"
+                Message = "DryRun: Would delete account with id [$aRef]"
+                IsError = $false
+            })
     }
 }
 catch {
@@ -99,10 +100,10 @@ catch {
         $errorMessage = "Could not delete account. Error: $($ex.Exception.Message) $($ex.ScriptStackTrace)"
     }
     $outputContext.AuditLogs.Add([PSCustomObject]@{
-        Action  = "Delete Account"
-        Message = "Error occurred when deleting account. Error Message: $($errorMessage.AuditErrorMessage)"
-        IsError = $true
-    })
+            Action  = "Delete Account"
+            Message = "Error occurred when deleting account. Error Message: $($errorMessage.AuditErrorMessage)"
+            IsError = $true
+        })
 }
 finally {
     # Check if auditLogs contains errors, if no errors are found, set success to true
