@@ -1,7 +1,7 @@
 #####################################################
 # HelloID-Conn-Prov-Target-Atlassian-Jira-Create
 #
-# Version: 2.0.0 | new-powershell-connector
+# Version: 3.0.0 | api changes
 #####################################################
 
 # Set to false at start, because only when no error occurs it is set to true
@@ -127,6 +127,7 @@ try {
             password     = $account.password
             emailAddress = $account.emailAddress
             displayName  = $account.displayname
+            products     = $account.products
         }
 
         $CreateParamsJson = $CreateParams | ConvertTo-Json

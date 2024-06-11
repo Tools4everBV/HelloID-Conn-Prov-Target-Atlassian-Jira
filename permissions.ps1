@@ -1,7 +1,7 @@
 #####################################################
 # HelloID-Conn-Prov-Target-Atlassian-Jira-Permissions
 #
-# Version: 2.0.0 | new-powershell-connector
+# Version: 3.0.0 | api changes
 #####################################################
 
 # Enable TLS1.2
