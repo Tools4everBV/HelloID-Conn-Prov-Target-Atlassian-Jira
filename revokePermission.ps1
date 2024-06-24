@@ -1,7 +1,7 @@
 #####################################################
 # HelloID-Conn-Prov-Target-Atlassian-Jira-Permission-Revoke
 #
-# Version: 2.0.0 | new-powershell-connector
+# Version: 3.0.0 | api changes
 #####################################################
 
 # Set to false at start, because only when no error occurs it is set to true
@@ -13,8 +13,8 @@ $aRef = $actionContext.References.Account
 # The permissionReference object contains the Identification object provided in the retrieve permissions call
 $pRef = $actionContext.References.Permission
 
-# Set TLS to accept TLS, TLS 1.1 and TLS 1.2
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls -bor [Net.SecurityProtocolType]::Tls11 -bor [Net.SecurityProtocolType]::Tls12
+# Enable TLS1.2
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
 # Set debug logging
 switch ($($actionContext.Configuration.isDebug)) {

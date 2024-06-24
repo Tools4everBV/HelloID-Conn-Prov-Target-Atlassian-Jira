@@ -1,13 +1,16 @@
 #####################################################
 # HelloID-Conn-Prov-Target-Atlassian-Jira-Delete
 #
-# Version: 2.0.0 | new-powershell-connector
+# Version: 3.0.0 | api changes
 #####################################################
 
 # Set to false at start, because only when no error occurs it is set to true
 $outputContext.Success = $false
 
 $aRef = $actionContext.References.Account
+
+# done in field mapping
+$account = $actionContext.Data
 
 # Set debug logging
 switch ($($actionContext.Configuration.isDebug)) {
@@ -17,9 +20,6 @@ switch ($($actionContext.Configuration.isDebug)) {
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
-
-# done in field mapping
-$account = $actionContext.Data
 
 #region functions
 function New-AuthorizationHeaders {
