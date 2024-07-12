@@ -45,7 +45,7 @@
             "Delete"
           ],
           "MappingMode": "Complex",
-          "Value": "\"function getName() {\\r\\n    let upn = '';\\r\\n\\r\\n    if (typeof Person.Accounts._222ffad775124575a881bf41dda33d7d.userPrincipalName !== 'undefined' && Person.Accounts._222ffad775124575a881bf41dda33d7d.userPrincipalName) {\\r\\n        upn = Person.Accounts._222ffad775124575a881bf41dda33d7d.userPrincipalName;\\r\\n    }\\r\\n\\r\\n    return upn;\\r\\n}\\r\\n\\r\\ngetName();\"",
+          "Value": "\"function getName() {\\r\\n    let upn = '';\\r\\n\\r\\n    if (typeof Person.Accounts.MicrosoftActiveDirectory.userPrincipalName !== 'undefined' && Person.Accounts.MicrosoftActiveDirectory.userPrincipalName) {\\r\\n        upn = Person.Accounts.MicrosoftActiveDirectory.userPrincipalName;\\r\\n    }\\r\\n\\r\\n    return upn;\\r\\n}\\r\\n\\r\\ngetName();\"",
           "UsedInNotifications": true,
           "StoreInAccountData": true
         }
@@ -61,7 +61,7 @@
             "Create"
           ],
           "MappingMode": "Complex",
-          "Value": "\"function getEmail() {\\r\\n    let mail = '';\\r\\n\\r\\n    if (typeof Person.Accounts._222ffad775124575a881bf41dda33d7d.userPrincipalName !== 'undefined' && Person.Accounts._222ffad775124575a881bf41dda33d7d.userPrincipalName) {\\r\\n        mail = Person.Accounts._222ffad775124575a881bf41dda33d7d.userPrincipalName;\\r\\n    }\\r\\n\\r\\n    return mail;\\r\\n}\\r\\n\\r\\ngetEmail();\"",
+          "Value": "\"function getEmail() {\\r\\n    let mail = '';\\r\\n\\r\\n    if (typeof Person.Accounts.MicrosoftActiveDirectory.userPrincipalName !== 'undefined' && Person.Accounts.MicrosoftActiveDirectory.userPrincipalName) {\\r\\n        mail = Person.Accounts.MicrosoftActiveDirectory.userPrincipalName;\\r\\n    }\\r\\n\\r\\n    return mail;\\r\\n}\\r\\n\\r\\ngetEmail();\"",
           "UsedInNotifications": true,
           "StoreInAccountData": true
         },

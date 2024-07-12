@@ -31,17 +31,15 @@ function New-AuthorizationHeaders {
         $username,
 
         [parameter(Mandatory)]
-        [SecureString]
+        [string]
         $password
     )
     try {    
         #Add the authorization header to the request
         Write-Verbose 'Adding Authorization headers'
 
-        $passwordToUse = $password | ConvertFrom-SecureString -AsPlainText
-
         $headers = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
-        $pair = $username + ":" + $passwordToUse
+        $pair = $username + ":" + $password
         $bytes = [System.Text.Encoding]::UTF8.GetBytes($pair)
         $base64 = [System.Convert]::ToBase64String($bytes)
         $key = "Basic $base64"
@@ -60,8 +58,7 @@ function New-AuthorizationHeaders {
 #endregion functions
 
 try {
-    [SecureString]$securePassword = ConvertTo-SecureString $actionContext.Configuration.token -AsPlainText -Force
-    $headers = New-AuthorizationHeaders -username $actionContext.Configuration.username -password $securePassword
+    $headers = New-AuthorizationHeaders -username $actionContext.Configuration.username -password $actionContext.Configuration.token
 
     if (-Not($actionContext.DryRun -eq $true)) {
         if ([string]::IsNullOrEmpty($aRef) -eq $false) {
