@@ -1,7 +1,7 @@
-#################################################
-# HelloID-Conn-Prov-Target-Atlassian-Jira-Create
+################################################################
+# HelloID-Conn-Prov-Target-Atlassian-Jira-GrantPermission-Group
 # PowerShell V2
-#################################################
+################################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
@@ -59,7 +59,7 @@ function New-AuthorizationHeaders {
         $password
     )
     try {    
-        # Add the authorization header to the request
+        #Add the authorization header to the request
         Write-Verbose 'Adding Authorization headers'
 
         $headers = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
@@ -81,9 +81,12 @@ function New-AuthorizationHeaders {
 }
 #endregion
 
+# Begin
 try {
-    # Initial Assignments
-    $outputContext.AccountReference = 'Currently not available'
+    # Verify if [accountReference] has a value
+    if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
+        throw 'The account reference could not be found'
+    }
 
     $splatHeaderParams = @{
         username = $actionContext.Configuration.username
@@ -91,89 +94,63 @@ try {
     }
     $headers = New-AuthorizationHeaders @splatHeaderParams
 
-    # Validate correlation configuration
-    if ($actionContext.CorrelationConfiguration.Enabled) {
-        $correlationField = $actionContext.CorrelationConfiguration.AccountField
-        $correlationValue = $actionContext.CorrelationConfiguration.PersonFieldValue
-
-        if ([string]::IsNullOrEmpty($($correlationField))) {
-            throw 'Correlation is enabled but not configured correctly'
-        }
-        if ([string]::IsNullOrEmpty($($correlationValue))) {
-            throw 'Correlation is enabled but [accountFieldValue] is empty. Please make sure it is correctly mapped'
-        }
-
-        # Determine if a user needs to be [created] or [correlated]
-        $splatCorrelateParams = @{
-            Uri         = "$($actionContext.Configuration.url)/rest/api/3/user/search?query=$correlationValue"
-            Method      = "GET"
-            ContentType = "application/json"
-            Headers     = $headers
-        }
-        $correlatedAccount = Invoke-RestMethod @splatCorrelateParams
-
-        if (($correlatedAccount | Measure-Object).Count -eq 1) {
-            $lifecycleProcess = 'CorrelateAccount'
-            $correlatedAccount = $correlatedAccount | Select-Object -First 1
-        }
-        elseif (($correlatedAccount | Measure-Object).Count -eq 0) {
-            $lifecycleProcess = 'CreateAccount'
-        }
-        elseif (($correlatedAccount | Measure-Object).Count -gt 1) {               
-            Throw "Multiple accounts found with $correlationField [$correlationValue]. Cannot correlate account."
-        }
+    Write-Information 'Verifying if a Atlassian-Jira account exists'
+    $splatCorrelateParams = @{
+        Uri         = "$($actionContext.Configuration.url)/rest/api/3/user?accountId=$($actionContext.References.Account)"
+        Method      = "GET"
+        ContentType = "application/json"
+        Headers     = $headers
+    }
+    $correlatedAccount = Invoke-RestMethod @splatCorrelateParams
+    
+    if ($null -ne $correlatedAccount) {
+        $lifecycleProcess = 'GrantPermission'
+    }
+    else {
+        $lifecycleProcess = 'NotFound'
     }
 
     # Process
     switch ($lifecycleProcess) {
-        'CreateAccount' {
-            $splatCreateParams = @{
-                Uri         = "$($actionContext.Configuration.url)/rest/api/3/user"
-                Body        = $actionContext.Data | ConvertTo-Json
-                Method      = "Post"
-                ContentType = "application/json"
-                Headers     = $headers
-            }
-
+        'GrantPermission' {
             # Make sure to test with special characters and if needed; add utf8 encoding.
             if (-not($actionContext.DryRun -eq $true)) {
-                Write-Information 'Creating and correlating Atlassian-Jira account'
-                $response = Invoke-RestMethod @splatCreateParams
-
-                $createdAccount = [PSCustomObject]@{
-                    displayName  = $response.displayName
-                    emailAddress = $response.emailAddress
-                    name         = $response.name
+                Write-Information "Granting Atlassian-Jira permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)]"
+                $body = @{
+                    accountId = "$($actionContext.References.Account)"
                 }
-                $outputContext.Data = $createdAccount
-                $outputContext.AccountReference = $createdAccount.accountId
-                    
+                
+                $splatGrantParams = @{
+                    Uri     = $actionContext.Configuration.url + "rest/api/3/group/user?groupId=$($actionContext.References.Permission.Reference)"
+                    Method  = "POST"
+                    Headers = $headers
+                    Body    = $body | ConvertTo-Json
+                }
+                $null = Invoke-RestMethod @splatGrantParams    
+
             }
             else {
-                Write-Information '[DryRun] Create and correlate Atlassian-Jira account, will be executed during enforcement'
+                Write-Information "[DryRun] Grant Atlassian-Jira permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)], will be executed during enforcement"
             }
-            $auditLogMessage = "Create account was successful. AccountReference is: [$($outputContext.AccountReference)]"
+
+            $outputContext.Success = $true
+            $outputContext.AuditLogs.Add([PSCustomObject]@{
+                    Message = "Grant permission [$($actionContext.PermissionDisplayName)] was successful"
+                    IsError = $false
+                })
             break
         }
 
-        'CorrelateAccount' {
-            Write-Information 'Correlating Atlassian-Jira account'
-
-            # Make sure to filter out arrays from $outputContext.Data (If this is not mapped to type Array in the fieldmapping). This is not supported by HelloID.
-            $outputContext.Data = $correlatedAccount
-            $outputContext.AccountReference = $correlatedAccount.accountId
-            $outputContext.AccountCorrelated = $true
-            $auditLogMessage = "Correlated account: [$($outputContext.AccountReference)] on field: [$($correlationField)] with value: [$($correlationValue)]"
+        'NotFound' {
+            Write-Information "Atlassian-Jira account: [$($actionContext.References.Account)] could not be found, indicating that it may have been deleted"
+            $outputContext.Success = $false
+            $outputContext.AuditLogs.Add([PSCustomObject]@{
+                    Message = "Atlassian-Jira account: [$($actionContext.References.Account)] could not be found, indicating that it may have been deleted"
+                    IsError = $true
+                })
             break
         }
     }
-
-    $outputContext.success = $true
-    $outputContext.AuditLogs.Add([PSCustomObject]@{
-            Action  = $lifecycleProcess
-            Message = $auditLogMessage
-            IsError = $false
-        })
 }
 catch {
     $outputContext.success = $false
@@ -181,11 +158,11 @@ catch {
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-Atlassian-JiraError -ErrorObject $ex
-        $auditLogMessage = "Could not create or correlate Atlassian-Jira account: [$($actionContext.References.Account)]. Error: $($errorObj.FriendlyMessage)"
+        $auditLogMessage = "Could not grant Atlassian-Jira permission for account: [$($actionContext.References.Account)]. Error: $($errorObj.FriendlyMessage)"
         Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     }
     else {
-        $auditLogMessage = "Could not create or correlate Atlassian-Jira account: [$($actionContext.References.Account)]. Error: $($ex.Exception.Message)"
+        $auditLogMessage = "Could not grant Atlassian-Jira permission for account: [$($actionContext.References.Account)]. Error: $($_.Exception.Message)"
         Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
     $outputContext.AuditLogs.Add([PSCustomObject]@{

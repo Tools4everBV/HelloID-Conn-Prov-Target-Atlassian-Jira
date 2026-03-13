@@ -35,19 +35,18 @@
       ]
     },
     {
-      "Name": "name",
-      "Description": "",
-      "Type": "Text",
+      "Name": "products",
+      "Description": "Products the new user has access to. Valid products are: jira-core, jira-servicedesk, jira-product-discovery, jira-software. To create a user without product access, set this field to be an empty array.",
+      "Type": "Array",
       "MappingActions": [
         {
           "MapForActions": [
-            "Create",
-            "Delete"
+            "Create"
           ],
           "MappingMode": "Complex",
-          "Value": "\"function getName() {\\r\\n    let upn = '';\\r\\n\\r\\n    if (typeof Person.Accounts.MicrosoftActiveDirectory.userPrincipalName !== 'undefined' && Person.Accounts.MicrosoftActiveDirectory.userPrincipalName) {\\r\\n        upn = Person.Accounts.MicrosoftActiveDirectory.userPrincipalName;\\r\\n    }\\r\\n\\r\\n    return upn;\\r\\n}\\r\\n\\r\\ngetName();\"",
-          "UsedInNotifications": true,
-          "StoreInAccountData": true
+          "Value": "\"function getProducts() {\\r\\n    let retVal = [];\\r\\n\\r\\n    return retVal;\\r\\n}\\r\\n\\r\\ngetProducts();\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
         }
       ]
     },
@@ -61,7 +60,7 @@
             "Create"
           ],
           "MappingMode": "Complex",
-          "Value": "\"function getEmail() {\\r\\n    let mail = '';\\r\\n\\r\\n    if (typeof Person.Accounts.MicrosoftActiveDirectory.userPrincipalName !== 'undefined' && Person.Accounts.MicrosoftActiveDirectory.userPrincipalName) {\\r\\n        mail = Person.Accounts.MicrosoftActiveDirectory.userPrincipalName;\\r\\n    }\\r\\n\\r\\n    return mail;\\r\\n}\\r\\n\\r\\ngetEmail();\"",
+          "Value": "\"function getEmail() {\\r\\n    let mail = '';\\r\\n\\r\\n    if (typeof Person.Accounts._a4ed05c84ea44c218e40178c2afb3ae9.userPrincipalName !== 'undefined' && Person.Accounts._a4ed05c84ea44c218e40178c2afb3ae9.userPrincipalName) {\\r\\n        mail = Person.Accounts._a4ed05c84ea44c218e40178c2afb3ae9.userPrincipalName;\\r\\n    }\\r\\n\\r\\n    return mail;\\r\\n}\\r\\n\\r\\ngetEmail();\"",
           "UsedInNotifications": true,
           "StoreInAccountData": true
         },
@@ -71,22 +70,6 @@
           ],
           "MappingMode": "Fixed",
           "Value": "\"\"",
-          "UsedInNotifications": false,
-          "StoreInAccountData": false
-        }
-      ]
-    },
-    {
-      "Name": "products",
-      "Description": "Products the new user has access to. Valid products are: jira-core, jira-servicedesk, jira-product-discovery, jira-software. To create a user without product access, set this field to be an empty array.",
-      "Type": "Array",
-      "MappingActions": [
-        {
-          "MapForActions": [
-            "Create"
-          ],
-          "MappingMode": "Complex",
-          "Value": "\"function getProducts() {\\r\\n    let retVal = [];\\r\\n\\r\\n    return retVal;\\r\\n}\\r\\n\\r\\ngetProducts();\"",
           "UsedInNotifications": false,
           "StoreInAccountData": false
         }
