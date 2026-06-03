@@ -3,12 +3,6 @@
 # PowerShell V2
 #####################################################
 
-# Set debug logging
-switch ($($actionContext.Configuration.isDebug)) {
-    $true { $VerbosePreference = 'Continue' }
-    $false { $VerbosePreference = 'SilentlyContinue' }
-}
-
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
@@ -40,13 +34,47 @@ function Resolve-Atlassian-JiraError {
         }
         try {
             $errorDetailsObject = ($httpErrorObj.ErrorDetails | ConvertFrom-Json)
-            # Make sure to inspect the error result object and add only the error message as a FriendlyMessage.
-            # $httpErrorObj.FriendlyMessage = $errorDetailsObject.message
-            $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails # Temporarily assignment
+            
+            # Extract Jira-specific error messages
+            $friendlyMessageParts = [System.Collections.Generic.List[string]]::new()
+            
+            # Check for errorMessages array (common in Jira API responses)
+            if ($errorDetailsObject.PSObject.Properties.Name -contains 'errorMessages') {
+                foreach ($errorMessage in $errorDetailsObject.errorMessages) {
+                    if (-not [string]::IsNullOrEmpty($errorMessage)) {
+                        $friendlyMessageParts.Add($errorMessage)
+                    }
+                }
+            }
+            
+            # Check for errors object with field-specific errors
+            if ($errorDetailsObject.PSObject.Properties.Name -contains 'errors') {
+                foreach ($errorProperty in $errorDetailsObject.errors.PSObject.Properties) {
+                    $fieldName = $errorProperty.Name
+                    $fieldError = $errorProperty.Value
+                    if (-not [string]::IsNullOrEmpty($fieldError)) {
+                        $friendlyMessageParts.Add("[$fieldName]: $fieldError")
+                    }
+                }
+            }
+            
+            # Check for single message property
+            if ($errorDetailsObject.PSObject.Properties.Name -contains 'message') {
+                if (-not [string]::IsNullOrEmpty($errorDetailsObject.message)) {
+                    $friendlyMessageParts.Add($errorDetailsObject.message)
+                }
+            }
+            
+            # Combine all error messages or fall back to raw error details
+            if ($friendlyMessageParts.Count -gt 0) {
+                $httpErrorObj.FriendlyMessage = $friendlyMessageParts -join '; '
+            }
+            else {
+                $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails
+            }
         }
         catch {
             $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails
-            Write-Warning $_.Exception.Message
         }
         Write-Output $httpErrorObj
     }
@@ -117,13 +145,12 @@ try {
             Write-Output @{
                 AccountReference = $importedAccount.accountId
                 displayName      = $importedAccount.displayName
-                UserName         = if (!([string]::IsNullOrEmpty($importedAccount.emailAddress))) { $importedAccount.emailAddress } else { $importedAccount.AccountId }
+                UserName         = if (!([string]::IsNullOrEmpty($importedAccount.emailAddress))) { $importedAccount.emailAddress } else { $importedAccount.accountId }
                 Enabled          = $importedAccount.active
                 Data             = $data
             }
         }
 
-        #$allUsers += $response
         $startAt += $maxResults
 
     } while ($importedAccounts.Count -eq $maxResults)

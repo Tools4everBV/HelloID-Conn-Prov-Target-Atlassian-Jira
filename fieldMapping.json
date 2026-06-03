@@ -60,7 +60,7 @@
             "Create"
           ],
           "MappingMode": "Complex",
-          "Value": "\"function getEmail() {\\r\\n    let mail = '';\\r\\n\\r\\n    if (typeof Person.Accounts._a4ed05c84ea44c218e40178c2afb3ae9.userPrincipalName !== 'undefined' && Person.Accounts._a4ed05c84ea44c218e40178c2afb3ae9.userPrincipalName) {\\r\\n        mail = Person.Accounts._a4ed05c84ea44c218e40178c2afb3ae9.userPrincipalName;\\r\\n    }\\r\\n\\r\\n    return mail;\\r\\n}\\r\\n\\r\\ngetEmail();\"",
+          "Value": "\"function getEmail() {\\r\\n    let mail = '';\\r\\n\\r\\n    if (typeof Person.Accounts.MicrosoftActiveDirectory.userPrincipalName !== 'undefined' && Person.Accounts.MicrosoftActiveDirectory.userPrincipalName) {\\r\\n        mail = Person.Accounts.MicrosoftActiveDirectory.userPrincipalName;\\r\\n    }\\r\\n\\r\\n    return mail;\\r\\n}\\r\\n\\r\\ngetEmail();\"",
           "UsedInNotifications": true,
           "StoreInAccountData": true
         },
