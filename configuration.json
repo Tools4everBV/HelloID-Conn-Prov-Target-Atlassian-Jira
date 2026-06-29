@@ -1,44 +1,35 @@
 [
   {
-    "key": "url",
-    "type": "input",
     "defaultValue": "",
+    "key": "url",
     "templateOptions": {
+      "description": "https://customer.atlassian.net",
       "label": "Jira API Url",
       "placeholder": "Enter the url",
-      "description": "https://customer.atlassian.net",
       "required": true
-    }
+    },
+    "type": "input"
   },
   {
-    "key": "username",
-    "type": "input",
     "defaultValue": "",
+    "key": "username",
     "templateOptions": {
+      "description": "",
       "label": "Jira API Username",
       "placeholder": "Enter the username",
-      "description": "",
       "required": true
-    }
+    },
+    "type": "input"
   },
   {
-    "key": "token",
-    "type": "input",
     "defaultValue": "",
+    "key": "token",
     "templateOptions": {
       "label": "Jira API Token",
-      "type": "password",
       "placeholder": "Please enter an API Token",
-      "required": true
-    }
-  },
-  {
-    "key": "isDebug",
-    "type": "checkbox",
-    "defaultValue": false,
-    "templateOptions": {
-      "label": "Toggle debug logging",
-      "required": false
-    }
+      "required": true,
+      "type": "password"
+    },
+    "type": "input"
   }
 ]

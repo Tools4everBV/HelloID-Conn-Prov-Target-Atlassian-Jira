@@ -1,7 +1,7 @@
-##################################################
-# HelloID-Conn-Prov-Target-Atlassian-Jira-Delete
+################################################################
+# HelloID-Conn-Prov-Target-Atlassian-Jira-GrantPermission-Group
 # PowerShell V2
-##################################################
+################################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
@@ -102,7 +102,7 @@ function New-AuthorizationHeaders {
         $base64 = [System.Convert]::ToBase64String($bytes)
         $key = "Basic $base64"
         $headers = @{
-            "authorization" = $key
+            "authorization" = $Key
             "Accept"        = "application/json"
             "Content-Type"  = "application/json"
         } 
@@ -115,12 +115,13 @@ function New-AuthorizationHeaders {
 }
 #endregion
 
+# Begin
 try {
     # Verify if [accountReference] has a value
     if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
         throw 'The account reference could not be found'
     }
-    
+
     $splatHeaderParams = @{
         username = $actionContext.Configuration.username
         password = $actionContext.Configuration.token
@@ -128,7 +129,6 @@ try {
     $headers = New-AuthorizationHeaders @splatHeaderParams
 
     Write-Information 'Verifying if a Atlassian-Jira account exists'
-    
     $splatCorrelateParams = @{
         Uri         = "$($actionContext.Configuration.url)/rest/api/3/user?accountId=$($actionContext.References.Account)"
         Method      = "GET"
@@ -136,10 +136,9 @@ try {
         Headers     = $headers
     }
     $correlatedAccount = Invoke-RestMethod @splatCorrelateParams
-      
     
     if ($null -ne $correlatedAccount) {
-        $lifecycleProcess = 'DeleteAccount'
+        $lifecycleProcess = 'GrantPermission'
     }
     else {
         $lifecycleProcess = 'NotFound'
@@ -147,31 +146,30 @@ try {
 
     # Process
     switch ($lifecycleProcess) {
-        'DeleteAccount' {
+        'GrantPermission' {
+            # Make sure to test with special characters and if needed; add utf8 encoding.
             if (-not($actionContext.DryRun -eq $true)) {
-                Write-Information "Deleting Atlassian-Jira account with accountReference: [$($actionContext.References.Account)]"
-
-                $splatDeleteParams = @{
-                    Uri     = "$($actionContext.Configuration.url)/rest/api/3/user?accountId=$($actionContext.References.Account)"
-                    Method  = "DELETE"
-                    Headers = $headers
+                Write-Information "Granting Atlassian-Jira permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)]"
+                $body = @{
+                    accountId = "$($actionContext.References.Account)"
                 }
-                $null = Invoke-RestMethod @splatDeleteParams
+                
+                $splatGrantParams = @{
+                    Uri     = $actionContext.Configuration.url + "rest/api/3/group/user?groupId=$($actionContext.References.Permission.Reference)"
+                    Method  = "POST"
+                    Headers = $headers
+                    Body    = $body | ConvertTo-Json
+                }
+                $null = Invoke-RestMethod @splatGrantParams    
 
-                $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Action  = "DeleteAccount"
-                        Message = "Successfully deleted account with id [$($actionContext.References.Account)]"
-                        IsError = $false
-                    })                
             }
             else {
-                Write-Information "[DryRun] Delete Atlassian-Jira account with accountReference: [$($actionContext.References.Account)], will be executed during enforcement"
+                Write-Information "[DryRun] Grant Atlassian-Jira permission: [$($actionContext.PermissionDisplayName)] - [$($actionContext.References.Permission.Reference)], will be executed during enforcement"
             }
 
-            # Make sure to filter out arrays from $outputContext.Data (If this is not mapped to type Array in the fieldmapping). This is not supported by HelloID.
             $outputContext.Success = $true
             $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Message = "Delete account: [$($actionContext.References.Account)] was successful. Action initiated by: [$($actionContext.Origin)]"
+                    Message = "Grant permission [$($actionContext.PermissionDisplayName)] was successful"
                     IsError = $false
                 })
             break
@@ -179,10 +177,10 @@ try {
 
         'NotFound' {
             Write-Information "Atlassian-Jira account: [$($actionContext.References.Account)] could not be found, indicating that it may have been deleted"
-            $outputContext.Success = $true
+            $outputContext.Success = $false
             $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Message = "Atlassian-Jira account: [$($actionContext.References.Account)] could not be found, indicating that it may have been deleted. Action initiated by: [$($actionContext.Origin)]"
-                    IsError = $false
+                    Message = "Atlassian-Jira account: [$($actionContext.References.Account)] could not be found, indicating that it may have been deleted"
+                    IsError = $true
                 })
             break
         }
@@ -194,11 +192,11 @@ catch {
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-Atlassian-JiraError -ErrorObject $ex
-        $auditLogMessage = "Could not delete Atlassian-Jira account: [$($actionContext.References.Account)]. Error: $($errorObj.FriendlyMessage). Action initiated by: [$($actionContext.Origin)]"
+        $auditLogMessage = "Could not grant Atlassian-Jira permission for account: [$($actionContext.References.Account)]. Error: $($errorObj.FriendlyMessage)"
         Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     }
     else {
-        $auditLogMessage = "Could not delete Atlassian-Jira account: [$($actionContext.References.Account)]. Error: $($_.Exception.Message). Action initiated by: [$($actionContext.Origin)]"
+        $auditLogMessage = "Could not grant Atlassian-Jira permission for account: [$($actionContext.References.Account)]. Error: $($_.Exception.Message)"
         Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
     $outputContext.AuditLogs.Add([PSCustomObject]@{

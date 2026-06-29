@@ -1,7 +1,7 @@
-##################################################
-# HelloID-Conn-Prov-Target-Atlassian-Jira-Delete
+#####################################################
+# HelloID-Conn-Prov-Target-Atlassian-Jira-Import
 # PowerShell V2
-##################################################
+#####################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
@@ -102,7 +102,7 @@ function New-AuthorizationHeaders {
         $base64 = [System.Convert]::ToBase64String($bytes)
         $key = "Basic $base64"
         $headers = @{
-            "authorization" = $key
+            "authorization" = $Key
             "Accept"        = "application/json"
             "Content-Type"  = "application/json"
         } 
@@ -113,96 +113,58 @@ function New-AuthorizationHeaders {
         $PSCmdlet.ThrowTerminatingError($_)
     }
 }
-#endregion
+#endregion functions
 
 try {
-    # Verify if [accountReference] has a value
-    if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
-        throw 'The account reference could not be found'
-    }
-    
     $splatHeaderParams = @{
         username = $actionContext.Configuration.username
         password = $actionContext.Configuration.token
     }
     $headers = New-AuthorizationHeaders @splatHeaderParams
-
-    Write-Information 'Verifying if a Atlassian-Jira account exists'
     
-    $splatCorrelateParams = @{
-        Uri         = "$($actionContext.Configuration.url)/rest/api/3/user?accountId=$($actionContext.References.Account)"
-        Method      = "GET"
-        ContentType = "application/json"
-        Headers     = $headers
-    }
-    $correlatedAccount = Invoke-RestMethod @splatCorrelateParams
-      
+    # Paginering instellingen
+    $startAt = 0
+    $maxResults = 500
+
+    do {
+        $splatImportParams = @{
+            Uri         = "$($actionContext.Configuration.url)/rest/api/3/users/search?startAt=$startAt&maxResults=$maxResults"
+            Method      = "GET"
+            ContentType = "application/json"
+            Headers     = $headers
+        }
+        $importedAccounts = Invoke-RestMethod @splatImportParams
+
+        foreach ($importedAccount in $importedAccounts) {
     
-    if ($null -ne $correlatedAccount) {
-        $lifecycleProcess = 'DeleteAccount'
-    }
-    else {
-        $lifecycleProcess = 'NotFound'
-    }
-
-    # Process
-    switch ($lifecycleProcess) {
-        'DeleteAccount' {
-            if (-not($actionContext.DryRun -eq $true)) {
-                Write-Information "Deleting Atlassian-Jira account with accountReference: [$($actionContext.References.Account)]"
-
-                $splatDeleteParams = @{
-                    Uri     = "$($actionContext.Configuration.url)/rest/api/3/user?accountId=$($actionContext.References.Account)"
-                    Method  = "DELETE"
-                    Headers = $headers
-                }
-                $null = Invoke-RestMethod @splatDeleteParams
-
-                $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Action  = "DeleteAccount"
-                        Message = "Successfully deleted account with id [$($actionContext.References.Account)]"
-                        IsError = $false
-                    })                
+            $data = @{}
+            foreach ($field in $actionContext.ImportFields) {
+                $data[$field] = $importedAccount.$field
             }
-            else {
-                Write-Information "[DryRun] Delete Atlassian-Jira account with accountReference: [$($actionContext.References.Account)], will be executed during enforcement"
+   
+            Write-Output @{
+                AccountReference = $importedAccount.accountId
+                displayName      = $importedAccount.displayName
+                UserName         = if (!([string]::IsNullOrEmpty($importedAccount.emailAddress))) { $importedAccount.emailAddress } else { $importedAccount.accountId }
+                Enabled          = $importedAccount.active
+                Data             = $data
             }
-
-            # Make sure to filter out arrays from $outputContext.Data (If this is not mapped to type Array in the fieldmapping). This is not supported by HelloID.
-            $outputContext.Success = $true
-            $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Message = "Delete account: [$($actionContext.References.Account)] was successful. Action initiated by: [$($actionContext.Origin)]"
-                    IsError = $false
-                })
-            break
         }
 
-        'NotFound' {
-            Write-Information "Atlassian-Jira account: [$($actionContext.References.Account)] could not be found, indicating that it may have been deleted"
-            $outputContext.Success = $true
-            $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Message = "Atlassian-Jira account: [$($actionContext.References.Account)] could not be found, indicating that it may have been deleted. Action initiated by: [$($actionContext.Origin)]"
-                    IsError = $false
-                })
-            break
-        }
-    }
-}
+        $startAt += $maxResults
+
+    } while ($importedAccounts.Count -eq $maxResults)
+} 
 catch {
-    $outputContext.success = $false
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
         $errorObj = Resolve-Atlassian-JiraError -ErrorObject $ex
-        $auditLogMessage = "Could not delete Atlassian-Jira account: [$($actionContext.References.Account)]. Error: $($errorObj.FriendlyMessage). Action initiated by: [$($actionContext.Origin)]"
         Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
+        Write-Error "Could not import Atlassian-Jira account entitlements. Error: $($errorObj.FriendlyMessage)"
     }
     else {
-        $auditLogMessage = "Could not delete Atlassian-Jira account: [$($actionContext.References.Account)]. Error: $($_.Exception.Message). Action initiated by: [$($actionContext.Origin)]"
         Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
+        Write-Error "Could not import Atlassian-Jira account entitlements. Error: $($ex.Exception.Message)"
     }
-    $outputContext.AuditLogs.Add([PSCustomObject]@{
-            Message = $auditLogMessage
-            IsError = $true
-        })
 }

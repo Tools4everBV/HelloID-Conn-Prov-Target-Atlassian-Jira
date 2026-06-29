@@ -1,29 +1,85 @@
-#####################################################
+#################################################
 # HelloID-Conn-Prov-Target-Atlassian-Jira-Create
-#
-# Version: 3.0.0 | api changes
-#####################################################
-
-# Set to false at start, because only when no error occurs it is set to true
-$outputContext.Success = $false
-
-# AccountReference must have a value for dryRun
-$outputContext.AccountReference = "Unknown"
-
-# done in field mapping
-$account = $actionContext.Data
-
-$action = ""
-# Set debug logging
-switch ($($actionContext.Configuration.isDebug)) {
-    $true { $VerbosePreference = 'Continue' }
-    $false { $VerbosePreference = 'SilentlyContinue' }
-}
+# PowerShell V2
+#################################################
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
 #region functions
+function Resolve-Atlassian-JiraError {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [object]
+        $ErrorObject
+    )
+    process {
+        $httpErrorObj = [PSCustomObject]@{
+            ScriptLineNumber = $ErrorObject.InvocationInfo.ScriptLineNumber
+            Line             = $ErrorObject.InvocationInfo.Line
+            ErrorDetails     = $ErrorObject.Exception.Message
+            FriendlyMessage  = $ErrorObject.Exception.Message
+        }
+        if (-not [string]::IsNullOrEmpty($ErrorObject.ErrorDetails.Message)) {
+            $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails.Message
+        }
+        elseif ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
+            if ($null -ne $ErrorObject.Exception.Response) {
+                $streamReaderResponse = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()
+                if (-not [string]::IsNullOrEmpty($streamReaderResponse)) {
+                    $httpErrorObj.ErrorDetails = $streamReaderResponse
+                }
+            }
+        }
+        try {
+            $errorDetailsObject = ($httpErrorObj.ErrorDetails | ConvertFrom-Json)
+            
+            # Extract Jira-specific error messages
+            $friendlyMessageParts = [System.Collections.Generic.List[string]]::new()
+            
+            # Check for errorMessages array (common in Jira API responses)
+            if ($errorDetailsObject.PSObject.Properties.Name -contains 'errorMessages') {
+                foreach ($errorMessage in $errorDetailsObject.errorMessages) {
+                    if (-not [string]::IsNullOrEmpty($errorMessage)) {
+                        $friendlyMessageParts.Add($errorMessage)
+                    }
+                }
+            }
+            
+            # Check for errors object with field-specific errors
+            if ($errorDetailsObject.PSObject.Properties.Name -contains 'errors') {
+                foreach ($errorProperty in $errorDetailsObject.errors.PSObject.Properties) {
+                    $fieldName = $errorProperty.Name
+                    $fieldError = $errorProperty.Value
+                    if (-not [string]::IsNullOrEmpty($fieldError)) {
+                        $friendlyMessageParts.Add("[$fieldName]: $fieldError")
+                    }
+                }
+            }
+            
+            # Check for single message property
+            if ($errorDetailsObject.PSObject.Properties.Name -contains 'message') {
+                if (-not [string]::IsNullOrEmpty($errorDetailsObject.message)) {
+                    $friendlyMessageParts.Add($errorDetailsObject.message)
+                }
+            }
+            
+            # Combine all error messages or fall back to raw error details
+            if ($friendlyMessageParts.Count -gt 0) {
+                $httpErrorObj.FriendlyMessage = $friendlyMessageParts -join '; '
+            }
+            else {
+                $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails
+            }
+        }
+        catch {
+            $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails
+        }
+        Write-Output $httpErrorObj
+    }
+}
+
 function New-AuthorizationHeaders {
     [CmdletBinding()]
     [OutputType([System.Collections.Generic.Dictionary[[String], [String]]])]
@@ -37,7 +93,7 @@ function New-AuthorizationHeaders {
         $password
     )
     try {    
-        #Add the authorization header to the request
+        # Add the authorization header to the request
         Write-Verbose 'Adding Authorization headers'
 
         $headers = [System.Collections.Generic.Dictionary[[String], [String]]]::new()
@@ -57,138 +113,117 @@ function New-AuthorizationHeaders {
         $PSCmdlet.ThrowTerminatingError($_)
     }
 }
-#endregion functions
+#endregion
 
 try {
-    $headers = New-AuthorizationHeaders -username $actionContext.Configuration.username -password $actionContext.Configuration.token
+    # Initial Assignments
+    $outputContext.AccountReference = 'Currently not available'
 
-    # Check if we should try to correlate the account
+    $splatHeaderParams = @{
+        username = $actionContext.Configuration.username
+        password = $actionContext.Configuration.token
+    }
+    $headers = New-AuthorizationHeaders @splatHeaderParams
+
+    # Validate correlation configuration
     if ($actionContext.CorrelationConfiguration.Enabled) {
-        $action = "correlate"
-        $correlationField = $actionContext.CorrelationConfiguration.accountField
-        $correlationValue = $actionContext.CorrelationConfiguration.accountFieldValue
+        $correlationField = $actionContext.CorrelationConfiguration.AccountField
+        $correlationValue = $actionContext.CorrelationConfiguration.PersonFieldValue
 
-        if ([string]::IsNullOrEmpty($correlationField)) {
-            Write-Warning "Correlation is enabled but not configured correctly."
-            Throw "Correlation is enabled but not configured correctly."
+        if ([string]::IsNullOrEmpty($($correlationField))) {
+            throw 'Correlation is enabled but not configured correctly'
+        }
+        if ([string]::IsNullOrEmpty($($correlationValue))) {
+            throw 'Correlation is enabled but [accountFieldValue] is empty. Please make sure it is correctly mapped'
         }
 
-        if ([string]::IsNullOrEmpty($correlationValue)) {
-            Write-Warning "The correlation value for [$correlationField] is empty. This is likely a scripting issue."
-            Throw "The correlation value for [$correlationField] is empty. This is likely a scripting issue."
+        # Determine if a user needs to be [created] or [correlated]
+        $splatCorrelateParams = @{
+            Uri         = "$($actionContext.Configuration.url)/rest/api/3/user/search?query=$correlationValue"
+            Method      = "GET"
+            ContentType = "application/json"
+            Headers     = $headers
         }
+        $correlatedAccount = Invoke-RestMethod @splatCorrelateParams
 
-        # get object
-        if ([string]::IsNullOrEmpty($($account.$correlationValue)) -eq $false) {
-            $url = $actionContext.Configuration.url + "/rest/api/3/user/search?query=" + $($account.$correlationValue)
-            $response = Invoke-RestMethod -Method GET -Uri $url -Headers $headers
-
-            if (($response | Measure-Object).Count -eq 1) {
-                if (-Not($actionContext.DryRun -eq $true)) {
-                    $outputContext.AuditLogs.Add([PSCustomObject]@{
-                            Action  = "CorrelateAccount"
-                            Message = "Correlated account with id [$($response.accountId)] on field $($correlationField) with value $($correlationValue)"
-                            IsError = $false
-                        })
-                }
-                else {
-                    Write-Warning "DryRun: Would correlate account [$($personContext.Person.DisplayName)] on field [$($correlationField)] with value [$($correlationValue)]"
-                    $outputContext.AuditLogs.Add([PSCustomObject]@{
-                            Action  = "CorrelateAccount"
-                            Message = "DryRun: Would correlate account [$($personContext.Person.DisplayName)] on field [$($correlationField)] with value [$($correlationValue)]"
-                            IsError = $false
-                        })
-                }
-                $outputContext.AccountReference = $response.accountId
-                $outputContext.AccountCorrelated = $true
-            }
+        if (($correlatedAccount | Measure-Object).Count -eq 1) {
+            $lifecycleProcess = 'CorrelateAccount'
+            $correlatedAccount = $correlatedAccount | Select-Object -First 1
         }
-    } 
-    else {
-        $outputContext.AuditLogs.Add([PSCustomObject]@{
-                Action  = "CorrelateAccount"
-                Message = "Configuration of correlation is mandatory."
-                IsError = $true
-            })
-        Throw "Configuration of correlation is mandatory."
+        elseif (($correlatedAccount | Measure-Object).Count -eq 0) {
+            $lifecycleProcess = 'CreateAccount'
+        }
+        elseif (($correlatedAccount | Measure-Object).Count -gt 1) {               
+            Throw "Multiple accounts found with $correlationField [$correlationValue]. Cannot correlate account."
+        }
     }
 
-    # create the account object if not present
-    if (!$outputContext.AccountCorrelated) {    
-        $action = "create" 
-        $account = $actionContext.Data
+    # Process
+    switch ($lifecycleProcess) {
+        'CreateAccount' {
+            $splatCreateParams = @{
+                Uri         = "$($actionContext.Configuration.url)/rest/api/3/user"
+                Body        = $actionContext.Data | ConvertTo-Json
+                Method      = "Post"
+                ContentType = "application/json"
+                Headers     = $headers
+            }
 
-        Write-Verbose "Creating account for: [$($personContext.Person.DisplayName)]"
-        $CreateParams = @{
-            name         = $account.name
-            password     = $account.password
-            emailAddress = $account.emailAddress
-            displayName  = $account.displayname
-            products     = $account.products
-        }
+            # Make sure to test with special characters and if needed; add utf8 encoding.
+            if (-not($actionContext.DryRun -eq $true)) {
+                Write-Information 'Creating and correlating Atlassian-Jira account'
+                $response = Invoke-RestMethod @splatCreateParams
 
-        $CreateParamsJson = $CreateParams | ConvertTo-Json
-        $url = $actionContext.Configuration.url + "/rest/api/3/user"
-        try {
-            if (-Not($actionContext.DryRun -eq $true)) {
-                $response = Invoke-RestMethod -Method Post -Uri $url -Body $CreateParamsJson -ContentType "application/json" -Headers $headers
-            
-                $outputContext.AccountReference = $response.accountId
                 $createdAccount = [PSCustomObject]@{
                     displayName  = $response.displayName
                     emailAddress = $response.emailAddress
                     name         = $response.name
                 }
                 $outputContext.Data = $createdAccount
-
-                $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Action  = "CreateAccount"
-                        Message = "Created account with email $($account.emailAddress)"
-                        IsError = $false
-                    })
-            } 
-            else {
-                Write-Warning "DryRun: Would create account [$($account | ConvertTo-Json)]"
-                $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        Action  = "CreateAccount"
-                        Message = "DryRun: Would create account [$($account | ConvertTo-Json)]"
-                        IsError = $false
-                    })
+                $outputContext.AccountReference = $createdAccount.accountId
+                    
             }
+            else {
+                Write-Information '[DryRun] Create and correlate Atlassian-Jira account, will be executed during enforcement'
+            }
+            $auditLogMessage = "Create account was successful. AccountReference is: [$($outputContext.AccountReference)]"
+            break
         }
-        catch {
-            $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Action  = "CreateAccount"
-                    Message = "Error creating account with email $($account.emailAddress) - Error: $($_)"
-                    IsError = $true
-                })
+
+        'CorrelateAccount' {
+            Write-Information 'Correlating Atlassian-Jira account'
+
+            # Make sure to filter out arrays from $outputContext.Data (If this is not mapped to type Array in the fieldmapping). This is not supported by HelloID.
+            $outputContext.Data = $correlatedAccount
+            $outputContext.AccountReference = $correlatedAccount.accountId
+            $outputContext.AccountCorrelated = $true
+            $auditLogMessage = "Correlated account: [$($outputContext.AccountReference)] on field: [$($correlationField)] with value: [$($correlationValue)]"
+            break
         }
     }
-} 
+
+    $outputContext.success = $true
+    $outputContext.AuditLogs.Add([PSCustomObject]@{
+            Action  = $lifecycleProcess
+            Message = $auditLogMessage
+            IsError = $false
+        })
+}
 catch {
+    $outputContext.success = $false
     $ex = $PSItem
     if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
         $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
-
-        if (-Not [string]::IsNullOrEmpty($ex.ErrorDetails.Message)) {
-            $errorMessage = "Could not $action account. Error: $($ex.ErrorDetails.Message)"
-        }
-        else {
-            $errorMessage = "Could not $action account. Error: $($ex.Exception.Message)"
-        }
+        $errorObj = Resolve-Atlassian-JiraError -ErrorObject $ex
+        $auditLogMessage = "Could not create or correlate Atlassian-Jira account: [$($actionContext.References.Account)]. Error: $($errorObj.FriendlyMessage)"
+        Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
     }
     else {
-        $errorMessage = "Could not $action account. Error: $($ex.Exception.Message) $($ex.ScriptStackTrace)"
+        $auditLogMessage = "Could not create or correlate Atlassian-Jira account: [$($actionContext.References.Account)]. Error: $($ex.Exception.Message)"
+        Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
     }
     $outputContext.AuditLogs.Add([PSCustomObject]@{
-            Action  = "CreateAccount"
-            Message = "Error occurred when $action account. Error Message: $($errorMessage)"
+            Message = $auditLogMessage
             IsError = $true
         })
-}
-finally {
-    # Check if auditLogs contains errors, if no errors are found, set success to true
-    if (-not($outputContext.AuditLogs.IsError -contains $true)) {
-        $outputContext.Success = $true
-    }
 }
